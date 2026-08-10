@@ -1,0 +1,15 @@
+{
+  "connection_drop_test": {
+    "drop_simulated": true,
+    "recovery_succeeded": true,
+    "error": null
+  },
+  "health_check_summary": {
+    "total_checks": 10,
+    "successful": 10,
+    "failed": 0,
+    "success_rate": 1.0,
+    "avg_latency_ms": 276.76,
+    "max_latency_ms": 538.0
+  }
+}
