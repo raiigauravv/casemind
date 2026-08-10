@@ -9,40 +9,89 @@ An AML/fraud-investigation copilot for a bank analyst, built for the
 
 ## Status
 
-🚧 Under active development. This README is a skeleton — full setup/run
-instructions land in Phase 8 once the agent loop, memory layer, and
-resilience test are built and rehearsed.
+Feature-complete and deployed end-to-end on live infrastructure:
+CockroachDB Cloud (Standard plan), AWS Lambda, AWS API Gateway, and AWS
+Bedrock. Every claim below was verified against real, running
+infrastructure — not mocked — including a full HTTPS round trip through
+the deployed API.
 
 ## What it does
 
 When a new flagged transaction/case comes in, CaseMind:
 
-1. Retrieves similar historical cases via semantic search over case
-   narratives (CockroachDB Distributed Vector Indexing).
-2. Reads related entity/decision history from structured memory
-   (CockroachDB MCP Server).
-3. Reasons about the case using Amazon Bedrock, informed by that retrieved
-   memory.
-4. Writes its decision, confidence, and notes back into memory (MCP
-   Server), with a full audit trail of which prior cases informed the call.
-5. Continuously monitors the health of its own memory layer via the
-   ccloud CLI, and survives a live node/region failure without losing
-   memory or stopping.
+1. Writes the incoming case to CockroachDB as `open`.
+2. Retrieves similar historical cases via semantic search over case
+   narratives, using CockroachDB's `VECTOR` column type and the `<->` L2
+   distance operator (Distributed Vector Indexing).
+3. Reads related entity/decision history from structured memory in
+   CockroachDB.
+4. Reasons about the case using Amazon Bedrock (Claude Haiku 4.5, via a
+   cross-region inference profile), informed by both retrieval sources
+   above.
+5. Writes its decision, confidence, and reasoning back into CockroachDB,
+   with `retrieved_case_ids` as an explicit, checkable audit trail of
+   which prior cases informed the call.
+6. Updates the case status (`closed_escalated` / `closed_cleared` /
+   still `open` for `monitor`).
+
+The whole loop runs inside a single AWS Lambda function
+(`casemind-agent-loop`), invokable three ways:
+
+- **S3 event** — drop a case JSON file into the `casemind-cases-*` bucket.
+- **Direct Lambda invocation** — for local/CLI testing.
+- **HTTPS POST** — via a live AWS API Gateway HTTP API, so a browser
+  frontend can call it synchronously. Live endpoint:
+  `https://cd6wy8mx54.execute-api.us-east-1.amazonaws.com/cases`
 
 ## Architecture
 
 See [`docs/architecture.svg`](docs/architecture.svg).
 
-## Tools used
+## Tools used (and how)
 
-**CockroachDB:** Managed MCP Server (primary agent memory interface),
-Distributed Vector Indexing (semantic case-narrative search), ccloud CLI
-(cluster health / backup / failover monitoring).
+**CockroachDB Cloud (Standard plan, AWS us-east-1):**
+- `VECTOR(1536)` column + `<->` operator for semantic case-narrative
+  retrieval (Distributed Vector Indexing) — this is what lets the agent
+  find precedent cases by meaning, not keyword match.
+- Structured tables (`cases`, `entities`, `decisions`) as the agent's
+  persistent memory — every decision is written back with the exact list
+  of case IDs that informed it, so the reasoning is auditable after the
+  fact, not just a black-box output.
+- **Honest scope note:** the Standard plan is fully managed and
+  multi-tenant. It does not expose per-node control to the customer (no
+  "kill node N" action, no Nodes page in the console) — that's a
+  Dedicated/Self-Hosted capability. So Phase 5's resilience test
+  (`agent/resilience_monitor.py`, `tests/test_resilience.py`) verifies
+  application-layer connection resilience — the agent's database client
+  recovers cleanly after a connection is forcibly severed mid-session —
+  rather than a literal node/region failover, which this plan doesn't
+  allow a customer to trigger or observe. This is disclosed in the code
+  and in `scripts/simulate_node_failure.sh`.
 
-**AWS:** Amazon Bedrock (case reasoning), AWS Lambda (event-driven agent
-execution loop).
+**AWS:**
+- **Bedrock** — Claude Haiku 4.5 (cross-region inference profile) for
+  case reasoning; Titan Embed Text v1 for the vectors that back the
+  semantic search above.
+- **Lambda** (Python 3.12) — the event-driven agent execution loop
+  (`agent/lambda_handler.py`), deployed via Terraform with a
+  cross-built `psycopg[binary]` wheel for Amazon Linux compatibility.
+- **API Gateway** (HTTP API v2) — synchronous HTTPS front door
+  (`POST /cases`) for the frontend, provisioned via Terraform
+  (`infra/api_gateway.tf`), AWS_PROXY integration into the same Lambda.
+- **S3** — case-drop trigger for the event-driven path.
+- **Budgets** — a $3 hard cost cap with an automated (not just
+  notification-based) IAM-deny budget action, so a runaway cost can't
+  exceed what was authorized for this project. See "Cost & safety"
+  below.
+- **IAM** — least-privilege policy scoped to `casemind-*` resources
+  wherever the AWS API allows resource-level scoping (a few actions,
+  like `lambda:GetFunctionCodeSigningConfig` and API Gateway management
+  actions, only support account-wide/`Resource: "*"` scoping — these are
+  called out explicitly in the policy).
 
-Full write-up of how each tool is used lands in Phase 8.
+**Lovable** — used to scaffold the Phase 7 demo frontend against the live
+API Gateway endpoint above. See `frontend/LOVABLE_PROMPT.md` for the exact
+spec used.
 
 ## Repo structure
 
@@ -52,17 +101,100 @@ casemind/
 ├── README.md
 ├── docs/
 │   └── architecture.svg
-├── infra/          # Terraform for Lambda, IAM, S3
+├── infra/          # Terraform: Lambda, IAM, S3, API Gateway
 ├── agent/          # memory client, vector search, reasoning, resilience monitor, Lambda handler
 ├── db/             # schema + synthetic seed data
-├── frontend/       # React demo app
-├── tests/          # memory ablation + resilience tests
-└── scripts/        # node/region failure simulation
+├── frontend/       # Lovable prompt + README for the demo dashboard
+├── tests/          # memory ablation + resilience tests (+ result JSON)
+└── scripts/        # resilience rehearsal script
 ```
 
 ## Setup & run instructions
 
-_To be filled in during Phase 2–7 as each component comes online._
+### Prerequisites
+
+- Python 3.12, `pip`
+- A CockroachDB Cloud cluster (Standard plan or above) with the schema in
+  `db/schema.sql` applied, seeded with `db/seed_synthetic_data.sql`
+- AWS account with Bedrock model access enabled for Claude Haiku 4.5 and
+  Titan Embed Text v1, in a region that supports the cross-region
+  inference profile used (`us.anthropic.claude-haiku-4-5-20251001-v1:0`)
+- Terraform >= 1.9 (for infra provisioning)
+
+### Local setup
+
+```bash
+cp .env.example .env
+# fill in COCKROACHDB_CONNECTION_STRING, AWS credentials, etc.
+pip install -r requirements.txt
+```
+
+### Run the agent loop locally (no AWS infra required)
+
+```bash
+set -a && source .env && set +a
+python3 -c "
+from agent.lambda_handler import handler
+import uuid
+print(handler({
+    'case_id': str(uuid.uuid4()),
+    'entity_id': '22222222-2222-2222-2222-222222222222',
+    'narrative': 'Customer received 9 incoming wires from 9 different individuals over 3 days, each just under the \$10,000 reporting threshold, then immediately wired the combined total to an offshore account.'
+}))
+"
+```
+
+### Deploy the AWS infrastructure
+
+```bash
+cd infra
+terraform init
+terraform apply
+# outputs the S3 bucket name and cases_api_endpoint (the live HTTPS URL)
+```
+
+### Run the tests
+
+```bash
+set -a && source .env && set +a
+python3 -m tests.test_memory_ablation   # writes tests/ablation_result.json
+python3 -m tests.test_resilience        # writes tests/resilience_result.json
+bash scripts/simulate_node_failure.sh   # wraps the resilience test with disclosure
+```
+
+### Frontend
+
+The demo dashboard is built in [Lovable](https://lovable.dev) against the
+live API endpoint. See `frontend/LOVABLE_PROMPT.md` for the spec, and
+`frontend/README.md` for pointers.
+
+## Test results (from this project's own runs)
+
+- **Memory ablation** (`tests/ablation_result.json`): both a blind run
+  (no retrieval) and an informed run (full retrieval + entity history)
+  against the same synthetic structuring-pattern case reach "escalate"
+  (blind confidence 0.92, informed confidence 0.87). The value memory
+  adds here isn't a flipped decision — it's *evidence quality*: the
+  informed run cites a specific precedent case ID and the entity's named
+  prior history, while the blind run reasons from the narrative alone.
+  That citation is what makes a decision auditable rather than just
+  asserted.
+- **Resilience** (`tests/resilience_result.json`): a forcibly severed
+  database connection is followed by a successful independent memory
+  operation (100% recovery), and a 30-second continuous health check
+  against the live cluster succeeded on 10/10 checks (~277ms avg
+  latency). See the scope note above on what this does and doesn't prove
+  given the Standard plan's lack of customer-facing node control.
+
+## Cost & safety
+
+This project is designed to stay within AWS/CockroachDB free-tier limits
+for hackathon-scale usage. As a hard backstop, AWS Budgets is configured
+with a **$3 cost cap and an automated IAM-deny budget action** (not just
+an email notification) — if actual/forecasted spend crosses the
+threshold, the budget action automatically restricts further
+billable-resource creation on this account, rather than relying on a
+human noticing an alert.
 
 ## Synthetic data disclosure
 
@@ -75,12 +207,4 @@ compliance product.
 
 ## License
 
-TBD — MIT or Apache 2.0 (see open questions below). See `LICENSE`.
-
-## Open questions
-
-- Which CockroachDB Cloud tier/plan supports the multi-node failure
-  simulation needed for Phase 5 (free tier vs. paid cluster).
-- Whether AEGIS's existing AWS IAM role/Terraform can be reused directly.
-- Final choice of demo frontend hosting (Vercel vs. S3+CloudFront).
-- License choice: MIT vs. Apache 2.0.
+Apache License 2.0. See `LICENSE`.
