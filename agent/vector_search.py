@@ -5,23 +5,25 @@ Flow: embed narrative -> query narrative_embedding vector index -> return
 top-k similar historical cases. Every query against the vector index is
 logged (audit trail), same discipline as memory_client.py.
 
-IMPLEMENTATION NOTE on embed(): the real embedding model is meant to be an
-AWS Bedrock embedding model (e.g. amazon.titan-embed-text-v2), which keeps
-the whole reasoning path on AWS + CockroachDB as the roadmap intends. AWS
-credentials aren't wired up yet (Phase 3), so embed() currently falls back
-to a deterministic local hashing embedding — NOT semantically meaningful,
-only useful to prove the retrieval pipeline (embed -> store -> ANN query
--> retrieve) works end-to-end against the live vector index. This MUST be
-swapped for a real Bedrock embedding call before the demo; the fallback
-is clearly labeled below and raises no illusions about being production-ready.
+IMPLEMENTATION NOTE on embed(): uses AWS Bedrock's amazon.titan-embed-text-v1
+model, which outputs a fixed 1536-dim vector matching the `cases.narrative_embedding
+VECTOR(1536)` column exactly (Titan v2 defaults to 1024/512/256 dims, which
+would have required a schema migration — v1 was chosen specifically to avoid
+that). Falls back to a deterministic local hashing embedding (NOT semantic,
+only useful for testing pipeline mechanics) if AWS credentials aren't
+configured. Verified end-to-end against the live vector index on
+2026-08-10 — retrieval correctly ranks semantically similar synthetic
+cases using real Titan embeddings.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import struct
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -31,6 +33,7 @@ logger = logging.getLogger("casemind.vector_search")
 logging.basicConfig(level=logging.INFO)
 
 EMBEDDING_DIM = 1536
+BEDROCK_EMBED_MODEL_ID = "amazon.titan-embed-text-v1"
 
 
 class VectorSearchNotConfigured(RuntimeError):
@@ -47,6 +50,10 @@ class SimilarCase:
 class VectorSearchClient:
     def __init__(self) -> None:
         self.connection_string = os.environ.get("COCKROACHDB_CONNECTION_STRING")
+        self.aws_region = os.environ.get("AWS_REGION")
+        self.aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+        self.aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        self._bedrock_client = None
 
     def _require_config(self) -> None:
         if not self.connection_string:
@@ -58,13 +65,24 @@ class VectorSearchClient:
         self._require_config()
         return psycopg.connect(self.connection_string, autocommit=True, connect_timeout=10)
 
-    def embed(self, narrative: str) -> list[float]:
-        """PLACEHOLDER embedding — deterministic feature hashing, NOT semantic.
+    def _bedrock_available(self) -> bool:
+        return bool(self.aws_region and self.aws_access_key and self.aws_secret_key)
 
-        Replace with a Bedrock embedding call (agent/reasoning.py's Bedrock
-        client can be reused for this) once AWS credentials are available.
-        Kept deterministic so repeated calls on the same narrative are
-        reproducible for testing.
+    def _get_bedrock_client(self):
+        if self._bedrock_client is None:
+            import boto3
+
+            self._bedrock_client = boto3.client(
+                "bedrock-runtime",
+                region_name=self.aws_region,
+                aws_access_key_id=self.aws_access_key,
+                aws_secret_access_key=self.aws_secret_key,
+            )
+        return self._bedrock_client
+
+    def _embed_hash_fallback(self, narrative: str) -> list[float]:
+        """Deterministic local feature-hashing embedding. NOT semantic —
+        only proves retrieval pipeline mechanics when Bedrock is unavailable.
         """
         vec = [0.0] * EMBEDDING_DIM
         words = narrative.lower().split()
@@ -77,6 +95,33 @@ class VectorSearchClient:
         if norm > 0:
             vec = [v / norm for v in vec]
         return vec
+
+    def embed(self, narrative: str, max_retries: int = 3) -> list[float]:
+        """Embed a narrative via Bedrock Titan; falls back to a local
+        deterministic hash embedding if AWS creds aren't configured.
+        """
+        if not self._bedrock_available():
+            logger.warning("AWS Bedrock not configured — using non-semantic hash fallback embedding")
+            return self._embed_hash_fallback(narrative)
+
+        from botocore.exceptions import ClientError
+
+        client = self._get_bedrock_client()
+        body = json.dumps({"inputText": narrative})
+        for attempt in range(max_retries):
+            try:
+                resp = client.invoke_model(modelId=BEDROCK_EMBED_MODEL_ID, body=body)
+                payload = json.loads(resp["body"].read())
+                return payload["embedding"]
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "")
+                if code == "ThrottlingException" and attempt < max_retries - 1:
+                    wait = 2**attempt * 2
+                    logger.warning("Bedrock embedding throttled, retrying in %ss", wait)
+                    time.sleep(wait)
+                    continue
+                logger.error("Bedrock embedding failed (%s), falling back to hash embedding", code)
+                return self._embed_hash_fallback(narrative)
 
     def backfill_embedding(self, case_id: str, narrative: str) -> None:
         """Compute and store the embedding for a single case row."""
