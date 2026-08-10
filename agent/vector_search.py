@@ -53,6 +53,7 @@ class VectorSearchClient:
         self.aws_region = os.environ.get("AWS_REGION")
         self.aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID")
         self.aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        self.aws_session_token = os.environ.get("AWS_SESSION_TOKEN")
         self._bedrock_client = None
 
     def _require_config(self) -> None:
@@ -72,12 +73,15 @@ class VectorSearchClient:
         if self._bedrock_client is None:
             import boto3
 
-            self._bedrock_client = boto3.client(
-                "bedrock-runtime",
-                region_name=self.aws_region,
-                aws_access_key_id=self.aws_access_key,
-                aws_secret_access_key=self.aws_secret_key,
-            )
+            kwargs = {"region_name": self.aws_region}
+            # See reasoning.py for why: only pass static creds when there's
+            # no session token, otherwise defer to boto3's default chain so
+            # Lambda's temporary role credentials (which need the session
+            # token) work correctly.
+            if self.aws_access_key and self.aws_secret_key and not self.aws_session_token:
+                kwargs["aws_access_key_id"] = self.aws_access_key
+                kwargs["aws_secret_access_key"] = self.aws_secret_key
+            self._bedrock_client = boto3.client("bedrock-runtime", **kwargs)
         return self._bedrock_client
 
     def _embed_hash_fallback(self, narrative: str) -> list[float]:

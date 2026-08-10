@@ -59,17 +59,18 @@ resource "aws_lambda_function" "agent_loop" {
   timeout       = var.lambda_timeout_seconds
   memory_size   = var.lambda_memory_mb
 
-  # Placeholder deployment package — actual build/packaging step lands in
-  # Phase 3 alongside the real lambda_handler.py implementation.
-  filename         = "placeholder.zip"
-  source_code_hash = filebase64sha256("placeholder.zip")
+  # Real deployment package: agent/*.py + psycopg[binary] + python-dotenv,
+  # built for manylinux2014_x86_64 / Python 3.12 to match this Lambda runtime.
+  filename         = "lambda_deploy.zip"
+  source_code_hash = filebase64sha256("lambda_deploy.zip")
 
   environment {
     variables = {
       COCKROACHDB_CONNECTION_STRING = var.cockroachdb_connection_string
       COCKROACHDB_MCP_URL           = var.cockroachdb_mcp_url
       BEDROCK_MODEL_ID              = var.bedrock_model_id
-      AWS_REGION                    = var.aws_region
+      # Note: AWS_REGION is a Lambda-reserved env var name (set automatically
+      # by the runtime) and cannot be set explicitly here.
     }
   }
 

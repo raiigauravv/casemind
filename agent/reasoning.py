@@ -75,6 +75,7 @@ class BedrockReasoner:
         self.model_id = os.environ.get("BEDROCK_MODEL_ID", DEFAULT_MODEL_ID)
         self.access_key = os.environ.get("AWS_ACCESS_KEY_ID")
         self.secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+        self.session_token = os.environ.get("AWS_SESSION_TOKEN")
         self._client = None
 
     def _require_config(self) -> None:
@@ -85,7 +86,15 @@ class BedrockReasoner:
         if self._client is None:
             self._require_config()
             kwargs = {"region_name": self.region}
-            if self.access_key and self.secret_key:
+            # Only override boto3's default credential chain when static
+            # (non-session) creds are supplied, e.g. local dev via .env.
+            # Inside Lambda, AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY are
+            # reserved env vars tied to a temporary session that also
+            # requires AWS_SESSION_TOKEN — passing the pair without the
+            # token produces "security token invalid". If a session token
+            # is present, let boto3's default chain (which handles this
+            # correctly) pick the credentials up instead.
+            if self.access_key and self.secret_key and not self.session_token:
                 kwargs["aws_access_key_id"] = self.access_key
                 kwargs["aws_secret_access_key"] = self.secret_key
             self._client = boto3.client("bedrock-runtime", **kwargs)
