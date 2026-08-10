@@ -1,0 +1,19 @@
+{
+  "blind": {
+    "decision": "escalate",
+    "confidence": 0.92,
+    "reasoning": "The pattern exhibits classic structuring indicators: multiple cash deposits just below the $10,000 CTR threshold ($9,100\u2013$9,700), compressed timeframe (9 days), multiple branch locations, and absence of stated business purpose. No mitigating historical context or prior decisions on file. This warrants investigation by compliance specialists to determine whether deposits are legitimate or constitute evasion of currency transaction reporting obligations."
+  },
+  "informed": {
+    "decision": "escalate",
+    "confidence": 0.87,
+    "reasoning": "Case exhibits classic structuring indicators: 14 deposits in 9 days, each $9,100\u2013$9,700 (just under $10k threshold), across multiple branches with no stated business purpose. Historical case a1111111-0000-0000-0000-000000000002 is directly analogous (22 structured transfers under threshold to a single recipient, prior escalation at 0.88 confidence), and entity's risk profile already flags high-frequency small transfers below reporting limits. Lack of legitimate business rationale combined with threshold-adjacent sizing and branch dispersal warrant escalation for further SAR evaluation.",
+    "retrieved_case_ids": [
+      "a1111111-0000-0000-0000-000000000001",
+      "a1111111-0000-0000-0000-000000000005",
+      "a1111111-0000-0000-0000-000000000004",
+      "a1111111-0000-0000-0000-000000000002",
+      "a1111111-0000-0000-0000-000000000003"
+    ]
+  }
+}
