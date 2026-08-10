@@ -41,6 +41,25 @@ variable "cockroachdb_mcp_url" {
   default     = "https://cockroachlabs.cloud/mcp"
 }
 
+variable "cockroachdb_cloud_api_key" {
+  description = "CockroachDB Cloud service-account API key, scoped read-only, used to authenticate to the Managed MCP Server (agent/memory_client.py MCPClient)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "cockroachdb_cluster_id" {
+  description = "CockroachDB Cloud cluster UUID, passed to MCP tool calls."
+  type        = string
+  default     = ""
+}
+
+variable "cockroachdb_database" {
+  description = "CockroachDB database name used for both direct-SQL and MCP reads."
+  type        = string
+  default     = "casemind"
+}
+
 variable "lambda_timeout_seconds" {
   description = "Timeout for the agent orchestration Lambda"
   type        = number

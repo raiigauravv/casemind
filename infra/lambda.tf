@@ -68,6 +68,9 @@ resource "aws_lambda_function" "agent_loop" {
     variables = {
       COCKROACHDB_CONNECTION_STRING = var.cockroachdb_connection_string
       COCKROACHDB_MCP_URL           = var.cockroachdb_mcp_url
+      COCKROACHDB_CLOUD_API_KEY     = var.cockroachdb_cloud_api_key
+      COCKROACHDB_CLUSTER_ID        = var.cockroachdb_cluster_id
+      COCKROACHDB_DATABASE          = var.cockroachdb_database
       BEDROCK_MODEL_ID              = var.bedrock_model_id
       # Note: AWS_REGION is a Lambda-reserved env var name (set automatically
       # by the runtime) and cannot be set explicitly here.
