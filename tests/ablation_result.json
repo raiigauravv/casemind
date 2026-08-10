@@ -1,19 +1,141 @@
 {
-  "blind": {
-    "decision": "escalate",
-    "confidence": 0.92,
-    "reasoning": "The pattern exhibits classic structuring indicators: multiple cash deposits just below the $10,000 CTR threshold ($9,100\u2013$9,700), compressed timeframe (9 days), multiple branch locations, and absence of stated business purpose. No mitigating historical context or prior decisions on file. This warrants investigation by compliance specialists to determine whether deposits are legitimate or constitute evasion of currency transaction reporting obligations."
+  "summary": {
+    "archetypes_tested": 5,
+    "avg_retrieved_cases_per_informed_run": 5.0,
+    "avg_confidence_delta_informed_minus_blind": -0.024,
+    "pct_informed_runs_citing_evidence": 1.0,
+    "pct_same_decision_blind_vs_informed": 1.0
   },
-  "informed": {
-    "decision": "escalate",
-    "confidence": 0.87,
-    "reasoning": "Case exhibits classic structuring indicators: 14 deposits in 9 days, each $9,100\u2013$9,700 (just under $10k threshold), across multiple branches with no stated business purpose. Historical case a1111111-0000-0000-0000-000000000002 is directly analogous (22 structured transfers under threshold to a single recipient, prior escalation at 0.88 confidence), and entity's risk profile already flags high-frequency small transfers below reporting limits. Lack of legitimate business rationale combined with threshold-adjacent sizing and branch dispersal warrant escalation for further SAR evaluation.",
-    "retrieved_case_ids": [
-      "a1111111-0000-0000-0000-000000000001",
-      "a1111111-0000-0000-0000-000000000005",
-      "a1111111-0000-0000-0000-000000000004",
-      "a1111111-0000-0000-0000-000000000002",
-      "a1111111-0000-0000-0000-000000000003"
-    ]
-  }
+  "results": [
+    {
+      "archetype": "structuring",
+      "entity_id": "22222222-2222-2222-2222-222222222222",
+      "narrative": "SYNTHETIC CASE. Individual opened a personal account and over nine days made 14 separate cash deposits ranging from $9,100 to $9,700, each just under the $10,000 currency transaction reporting threshold, across three different branch locations. No stated business purpose for the pattern.",
+      "blind": {
+        "decision": "escalate",
+        "confidence": 0.92,
+        "reasoning": "The pattern exhibits multiple hallmarks of structuring (deliberate avoidance of $10k reporting threshold): 14 deposits in 9 days, each precisely $100-900 below the threshold, across multiple branches. Absence of stated business purpose combined with the deliberate denomination pattern and geographic dispersal substantially increases suspicious activity indicators despite lack of historical precedent in retrieval."
+      },
+      "informed": {
+        "decision": "escalate",
+        "confidence": 0.89,
+        "reasoning": "The pattern matches case a1111111-0000-0000-0000-000000000002 (structuring signature: multiple transfers just under $10k threshold) and aligns with the entity's prior escalation decision (confidence 0.88) for similar below-threshold clustering behavior. While case a1111111-0000-0000-0000-000000000001 involved higher velocity and offshore movement, the current case exhibits deliberate threshold avoidance across multiple branches with no stated purpose, a hallmark structuring indicator warranting investigation.",
+        "retrieved_case_ids": [
+          "a1111111-0000-0000-0000-000000000001",
+          "a1111111-0000-0000-0000-000000000005",
+          "a1111111-0000-0000-0000-000000000004",
+          "a1111111-0000-0000-0000-000000000002",
+          "a1111111-0000-0000-0000-000000000003"
+        ]
+      },
+      "same_decision": true,
+      "confidence_delta": -0.03,
+      "cites_evidence": true,
+      "retrieved_count": 5
+    },
+    {
+      "archetype": "shell_company_layering",
+      "entity_id": "11111111-1111-1111-1111-111111111111",
+      "narrative": "SYNTHETIC CASE. Entity received five incoming wires over 36 hours from unrelated synthetic shell companies totaling $340,000, followed by an outbound transfer of 94% of the balance to a synthetic offshore account the same day. No business rationale documented for the pass-through.",
+      "blind": {
+        "decision": "escalate",
+        "confidence": 0.92,
+        "reasoning": "Multiple red flags align with classic layering patterns: rapid aggregation of funds from unrelated shell entities within 36 hours, immediate 94% sweep to offshore account, and absence of documented business purpose. No historical cases retrieved to contextualize entity's legitimate patterns, and absence of prior decision history prevents baseline comparison. Pattern warrants investigation for potential structuring or funds movement through synthetic intermediaries."
+      },
+      "informed": {
+        "decision": "escalate",
+        "confidence": 0.94,
+        "reasoning": "Current case exhibits near-identical structural risk to the highest-similarity historical case (a1111111-0000-0000-0000-000000000001): multiple unrelated shell-company sources aggregated and immediately routed offshore with no documented business rationale. Combined with entity's prior escalation decision citing layering patterns and synthetic shell-company ownership structure, this demonstrates consistent high-risk behavior. The 94% pass-through ratio and 36-hour velocity amplify classic trade-based money laundering indicators.",
+        "retrieved_case_ids": [
+          "a1111111-0000-0000-0000-000000000001",
+          "a1111111-0000-0000-0000-000000000005",
+          "a1111111-0000-0000-0000-000000000004",
+          "a1111111-0000-0000-0000-000000000003",
+          "a1111111-0000-0000-0000-000000000002"
+        ]
+      },
+      "same_decision": true,
+      "confidence_delta": 0.02,
+      "cites_evidence": true,
+      "retrieved_count": 5
+    },
+    {
+      "archetype": "trade_based_laundering",
+      "entity_id": "33333333-3333-3333-3333-333333333333",
+      "narrative": "SYNTHETIC CASE. Trade-finance invoice for synthetic industrial goods priced at roughly 3.5x typical market rate for the stated quantity, with payment routed through two intermediary synthetic jurisdictions before reaching the final beneficiary.",
+      "blind": {
+        "decision": "escalate",
+        "confidence": 0.85,
+        "reasoning": "The case exhibits two elevated risk indicators: pricing at 3.5x market rate suggests potential trade-based money laundering (TBML) or invoice manipulation, and the two-hop routing through intermediary jurisdictions adds opacity inconsistent with straightforward trade finance. Without similar historical cases or prior entity history to provide comparative context, the combination of pricing anomaly and geographic routing complexity warrants escalation for analyst review and beneficial ownership verification."
+      },
+      "informed": {
+        "decision": "escalate",
+        "confidence": 0.82,
+        "reasoning": "The current case exhibits a near-identical pattern to case a1111111-0000-0000-0000-000000000003 (similarity=-0.605): overpriced trade-finance invoice (3.5x vs. 4x market rate) with dual intermediary jurisdictions, both hallmarks of trade-based money laundering typologies. This aligns with the entity's prior escalation decision citing invoice-value inconsistencies and routing through high-risk jurisdictions. The structural similarity and established entity risk profile warrant escalation for trade-finance investigation.",
+        "retrieved_case_ids": [
+          "a1111111-0000-0000-0000-000000000003",
+          "a1111111-0000-0000-0000-000000000001",
+          "a1111111-0000-0000-0000-000000000005",
+          "a1111111-0000-0000-0000-000000000004",
+          "a1111111-0000-0000-0000-000000000002"
+        ]
+      },
+      "same_decision": true,
+      "confidence_delta": -0.03,
+      "cites_evidence": true,
+      "retrieved_count": 5
+    },
+    {
+      "archetype": "benign_verified_payroll",
+      "entity_id": "44444444-4444-4444-4444-444444444444",
+      "narrative": "SYNTHETIC CASE. Long-standing customer received a $6,200 inbound transfer from a synthetic verified payroll source, consistent with their regular biweekly pay cycle on file. No structuring, velocity, or counterparty anomalies.",
+      "blind": {
+        "decision": "clear",
+        "confidence": 0.94,
+        "reasoning": "Inbound transfer aligns with documented biweekly payroll pattern from verified source with no behavioral deviations (structuring, velocity, or counterparty anomalies). Long-standing customer status and consistency with known pay cycle support legitimate income classification. Absence of contradictory historical flags reinforces low-risk profile."
+      },
+      "informed": {
+        "decision": "clear",
+        "confidence": 0.89,
+        "reasoning": "This case presents a routine, predictable inbound transfer consistent with established payroll patterns for a long-standing customer with no behavioral anomalies. The retrieved cases show that verified payroll sources with matching transaction rationales and absent structuring/velocity indicators warrant clearance (case a1111111-0000-0000-0000-000000000004), while genuine risk surfaces through shell-company layering, deliberate structuring, dormancy patterns, or invoice manipulation\u2014none present here. Prior decision history confirms clean profile and payroll verification alignment.",
+        "retrieved_case_ids": [
+          "a1111111-0000-0000-0000-000000000004",
+          "a1111111-0000-0000-0000-000000000001",
+          "a1111111-0000-0000-0000-000000000002",
+          "a1111111-0000-0000-0000-000000000005",
+          "a1111111-0000-0000-0000-000000000003"
+        ]
+      },
+      "same_decision": true,
+      "confidence_delta": -0.05,
+      "cites_evidence": true,
+      "retrieved_count": 5
+    },
+    {
+      "archetype": "benign_dormant_single_deposit",
+      "entity_id": "55555555-5555-5555-5555-555555555555",
+      "narrative": "SYNTHETIC CASE. Newly opened synthetic business account received a single inbound wire consistent in size and counterparty with the account's stated business purpose, and the account has remained active with regular small transactions since. No dormancy or withdrawal anomalies observed.",
+      "blind": {
+        "decision": "clear",
+        "confidence": 0.85,
+        "reasoning": "New business account shows activity pattern aligned with stated purpose: single appropriately-sized inbound wire from expected counterparty, followed by consistent regular small transactions with no dormancy or anomalous withdrawals. Absence of red flags (rapid movement, structuring, mismatched counterparties) and coherent transaction behavior supports legitimate business operation. No historical precedents retrieved to suggest elevated risk profile."
+      },
+      "informed": {
+        "decision": "clear",
+        "confidence": 0.82,
+        "reasoning": "Current case exhibits low-risk profile: consistent wire size matching stated business purpose, active transactional pattern with no dormancy or withdrawal anomalies. Retrieved cases a1111111-0000-0000-0000-000000000005 and a1111111-0000-0000-0000-000000000001 show high-risk patterns (dormancy+full withdrawal, rapid multi-source aggregation+offshore transfer) absent here. Case a1111111-0000-0000-0000-000000000004 provides closest parallel with inbound wire aligned to stated purpose. Offshore jurisdiction registration warrants ongoing monitoring but does not override the benign transaction behavior observed.",
+        "retrieved_case_ids": [
+          "a1111111-0000-0000-0000-000000000005",
+          "a1111111-0000-0000-0000-000000000001",
+          "a1111111-0000-0000-0000-000000000003",
+          "a1111111-0000-0000-0000-000000000004",
+          "a1111111-0000-0000-0000-000000000002"
+        ]
+      },
+      "same_decision": true,
+      "confidence_delta": -0.03,
+      "cites_evidence": true,
+      "retrieved_count": 5
+    }
+  ]
 }

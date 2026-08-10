@@ -49,14 +49,22 @@ See [`docs/architecture.svg`](docs/architecture.svg).
 
 ## Tools used (and how)
 
-**CockroachDB Cloud (Standard plan, AWS us-east-1):**
-- `VECTOR(1536)` column + `<->` operator for semantic case-narrative
-  retrieval (Distributed Vector Indexing) — this is what lets the agent
-  find precedent cases by meaning, not keyword match.
+**CockroachDB Cloud (Standard plan, AWS us-east-1) — two of the four listed tools:**
+- **Distributed Vector Indexing** — `VECTOR(1536)` column + `<->` operator
+  for semantic case-narrative retrieval — this is what lets the agent find
+  precedent cases by meaning, not keyword match (`agent/vector_search.py`).
+- **Managed MCP Server** (`https://cockroachlabs.cloud/mcp`) — entity/decision
+  history reads go through the MCP Server's `select_query` tool over a
+  stdlib-only JSON-RPC client (`agent/memory_client.py: MCPClient`),
+  authenticated with a scoped, read-only service-account API key. If the MCP
+  call fails for any reason (e.g. an auth/session issue), the client
+  transparently falls back to a direct SQL read on the same tables and logs
+  a distinct `MCP_FALLBACK` audit line — so the agent loop is never blocked
+  by MCP infra issues, and the fallback is never silent.
 - Structured tables (`cases`, `entities`, `decisions`) as the agent's
-  persistent memory — every decision is written back with the exact list
-  of case IDs that informed it, so the reasoning is auditable after the
-  fact, not just a black-box output.
+  persistent memory — every decision is written back via direct SQL with the
+  exact list of case IDs that informed it, so the reasoning is auditable
+  after the fact, not just a black-box output.
 - **Honest scope note:** the Standard plan is fully managed and
   multi-tenant. It does not expose per-node control to the customer (no
   "kill node N" action, no Nodes page in the console) — that's a
@@ -170,15 +178,19 @@ live API endpoint. See `frontend/LOVABLE_PROMPT.md` for the spec, and
 
 ## Test results (from this project's own runs)
 
-- **Memory ablation** (`tests/ablation_result.json`): both a blind run
-  (no retrieval) and an informed run (full retrieval + entity history)
-  against the same synthetic structuring-pattern case reach "escalate"
-  (blind confidence 0.92, informed confidence 0.87). The value memory
-  adds here isn't a flipped decision — it's *evidence quality*: the
-  informed run cites a specific precedent case ID and the entity's named
-  prior history, while the blind run reasons from the narrative alone.
-  That citation is what makes a decision auditable rather than just
-  asserted.
+- **Memory ablation** (`tests/ablation_result.json`): run across five
+  archetypes (structuring, shell-company layering, trade-based
+  laundering, and two benign patterns), each paired blind (no retrieval)
+  vs. informed (real vector search + real entity history), for 10 live
+  Bedrock calls total. Blind and informed agreed on the decision label in
+  5/5 archetypes (confidence deltas were small, -0.05 to +0.02) — so the
+  measurable value memory adds here isn't flipping decisions, it's
+  *evidence grounding*: 5/5 (100%) of informed runs explicitly cited a
+  specific retrieved case ID or the entity's prior decision history in
+  their reasoning text, while every blind run could only assert a label
+  with no traceable evidence behind it. That citation is what makes a
+  decision auditable and checkable against real rows in CockroachDB,
+  rather than a black-box assertion.
 - **Resilience** (`tests/resilience_result.json`): a forcibly severed
   database connection is followed by a successful independent memory
   operation (100% recovery), and a 30-second continuous health check
