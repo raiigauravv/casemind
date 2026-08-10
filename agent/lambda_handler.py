@@ -31,8 +31,14 @@ logger = logging.getLogger("casemind.lambda_handler")
 logging.basicConfig(level=logging.INFO)
 
 
+def _is_apigw_event(event: dict[str, Any]) -> bool:
+    """True if this invocation came through API Gateway (HTTP API v2 proxy)."""
+    return "requestContext" in event and "http" in event.get("requestContext", {})
+
+
 def _load_case_payload(event: dict[str, Any]) -> dict[str, Any]:
-    """Extract a case payload from either an S3 event or a direct invocation."""
+    """Extract a case payload from an S3 event, an API Gateway HTTP API
+    proxy request, or a direct invocation payload."""
     if "Records" in event and event["Records"] and "s3" in event["Records"][0]:
         import boto3
 
@@ -44,11 +50,20 @@ def _load_case_payload(event: dict[str, Any]) -> dict[str, Any]:
         obj = s3.get_object(Bucket=bucket, Key=key)
         return json.loads(obj["Body"].read())
 
+    if _is_apigw_event(event):
+        body = event.get("body") or "{}"
+        if event.get("isBase64Encoded"):
+            import base64
+
+            body = base64.b64decode(body).decode()
+        logger.info("[LAMBDA_AUDIT] op=APIGW_READ route=%s", event.get("routeKey"))
+        return json.loads(body)
+
     # direct invocation payload (local testing, or a synchronous API path)
     if "case_id" in event or "narrative" in event:
         return event
 
-    raise ValueError(f"Unrecognized event shape, expected S3 record or direct case payload: {event!r}")
+    raise ValueError(f"Unrecognized event shape, expected S3 record, API Gateway request, or direct case payload: {event!r}")
 
 
 def _format_similar_cases(similar) -> list[str]:
@@ -66,12 +81,38 @@ def _format_entity_history(entity_history: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+CORS_HEADERS = {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+}
+
+
 def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
+    is_apigw = _is_apigw_event(event)
+
+    if is_apigw:
+        try:
+            return _handle_case(event)
+        except Exception as e:  # noqa: BLE001 — surface errors as JSON to the frontend, not a raw Lambda 500
+            logger.exception("[LAMBDA_AUDIT] op=ERROR")
+            return {
+                "statusCode": 500,
+                "headers": CORS_HEADERS,
+                "body": json.dumps({"error": str(e)}),
+            }
+
+    return _handle_case(event)
+
+
+def _handle_case(event: dict[str, Any]) -> dict[str, Any]:
     logger.info(
         "[LAMBDA_AUDIT] ts=%s op=INVOKE event_keys=%s",
         datetime.now(timezone.utc).isoformat(),
         list(event.keys()),
     )
+    is_apigw = _is_apigw_event(event)
 
     memory = MemoryClient()
     vectors = VectorSearchClient()
@@ -124,7 +165,7 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
         retrieved_case_ids,
     )
 
-    return {
+    result_body = {
         "case_id": case_id,
         "decision_id": decision_id,
         "decision": result.decision,
@@ -132,3 +173,11 @@ def handler(event: dict[str, Any], context: Any = None) -> dict[str, Any]:
         "reasoning": result.reasoning,
         "retrieved_case_ids": retrieved_case_ids,
     }
+
+    if is_apigw:
+        return {
+            "statusCode": 200,
+            "headers": CORS_HEADERS,
+            "body": json.dumps(result_body),
+        }
+    return result_body
